@@ -1,0 +1,3 @@
+cli/target/
+**/__pychache__/**
+.rustc_info.json

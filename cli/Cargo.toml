@@ -1,0 +1,27 @@
+[package]
+name = "csilctl"
+version = "0.1.0"
+edition = "2024"
+description = "a curl-like CLI for sending arbitrary CSIL messages"
+
+[lib]
+name = "csilctl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "csilctl"
+path = "src/main.rs"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+csilgen-core = { path = "../../csilgen/crates/csilgen-core" }
+csilgen = { path = "../../csilgen/crates/csilgen-cli" }
+csilgen-transport = { path = "../../csilgen/transports/rust" }
+anyhow = "1.0"
+console = "0.15"
+serde_json = "1.0"
+ciborium = "0.2"
+regex = "1"
+
+[dev-dependencies]
+tempfile = "3.0"

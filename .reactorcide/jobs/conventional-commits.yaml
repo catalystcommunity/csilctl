@@ -1,0 +1,15 @@
+name: csilctl-conventional-commits
+description: "Validate that every PR commit subject follows Conventional Commits."
+triggers:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+job:
+  image: containers.catalystsquad.com/public/reactorcide/runnerbase:dev
+  command: "python3 .reactorcide/jobs/scripts/conventional_commits.py"
+  timeout: 300
+  priority: 10
+  working_dir: /job/src
+  raw_command: true
