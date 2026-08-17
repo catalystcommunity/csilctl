@@ -32,11 +32,11 @@ A `curl`/`grpcurl`-style CLI for sending arbitrary [CSIL](https://github.com/cat
    csilctl --client ./corndogs.csil send --message CreateWidget --data '{"name": "widget-1"}' --host example.com:9000
    ```
 
-## Usage (target interface)
+## Usage
 
 | Flag              | Scope  | Description                                                                 |
 |-------------------|--------|-----------------------------------------------------------------------------|
-| `--client`        | global | For `list`: path to a `.csil` source file. For `send`: path to a folder containing a pre-generated csilgen Go client |
+| `--client`        | global | Path to a `.csil` source file                                               |
 | `--disable-color` | global | Disable colorized output (see priority order below)                         |
 | `--message`       | `send` | Name of the message/operation to send                                       |
 | `--data`          | `send` | JSON-like payload for the message; missing required fields are prompted for |
@@ -49,11 +49,9 @@ A `curl`/`grpcurl`-style CLI for sending arbitrary [CSIL](https://github.com/cat
 
 `list` output is colorized by default. `NO_COLOR` beats `FORCE_COLOR` beats `--disable-color` — e.g. `FORCE_COLOR=1 csilctl --client ./corndogs.csil --disable-color list` still prints in color, since `FORCE_COLOR` wins over the flag.
 
-This is the intended CLI surface for the initial implementation and may evolve.
-
 ## Dev flow
 
-CI/CD runs on [Reactorcide](https://github.com/catalystcommunity/reactorcide/), with releases versioned and tagged via [semver-tags](https://github.com/catalystcommunity/semver-tags). Pull requests will be checked with [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/)
+CI/CD runs on [Reactorcide](https://github.com/catalystcommunity/reactorcide/), with releases versioned and tagged via [semver-tags](https://github.com/catalystcommunity/semver-tags). Pull requests will be checked to use [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/)
 
 ## Project structure
 
