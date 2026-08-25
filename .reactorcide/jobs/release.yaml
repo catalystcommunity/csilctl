@@ -12,7 +12,6 @@ job:
   timeout: 1800
   priority: 15
   working_dir: /job/src
-  raw_command: true
   disable_run_local: true
   capabilities:
     - builder

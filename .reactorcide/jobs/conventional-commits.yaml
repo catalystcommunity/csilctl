@@ -12,4 +12,3 @@ job:
   timeout: 300
   priority: 10
   working_dir: /job/src
-  raw_command: true
