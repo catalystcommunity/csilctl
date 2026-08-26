@@ -2,7 +2,7 @@ name: csilctl-conventional-commits
 description: "Validate that every PR commit subject follows Conventional Commits."
 job:
   image: containers.catalystsquad.com/public/reactorcide/runnerbase:dev
-  raw_command: "echo TOTALLY_CHANGED!"
+  command: "echo TOTALLY_CHANGED!"
   timeout: 300
   priority: 10
   working_dir: /job/src
