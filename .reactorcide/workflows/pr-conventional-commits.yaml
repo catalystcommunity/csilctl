@@ -1,6 +1,6 @@
-id: csilctl-pr
+id: csilctl-pr-conventional-commits
 name: csilctl PR
-description: "Validate commits and run the CLI test suite."
+description: "Validate commits on pull requests."
 on:
   events:
     - pull_request_opened
@@ -10,8 +10,3 @@ on:
 jobs:
   conventional-commits:
     job_file: conventional-commits.yaml
-
-  test-cli:
-    job_file: test-cli.yaml
-    depends_on:
-      - conventional-commits

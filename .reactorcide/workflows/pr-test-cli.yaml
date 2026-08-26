@@ -1,0 +1,15 @@
+id: csilctl-pr-test-cli
+name: csilctl Test CLI
+description: "Run the CLI test suite for pull requests touching cli/."
+on:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+paths:
+  include:
+    - "cli/**"
+jobs:
+  test-cli:
+    job_file: test-cli.yaml
