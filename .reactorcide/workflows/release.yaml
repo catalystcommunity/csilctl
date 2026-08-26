@@ -1,0 +1,11 @@
+name: csilctl Release
+description: "On merge to main: semver-tag csilctl, cross-build the CLI, and publish a GitHub release."
+on:
+  events:
+    - pull_request_merged
+    - push
+  branches:
+    - main
+jobs:
+  release:
+    job_file: release.yaml
