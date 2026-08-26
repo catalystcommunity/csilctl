@@ -393,6 +393,10 @@ mod tests {
         }
         out
     }
+    #[test]
+    fn should_fail() {
+        assert_eq!(true, false);
+    }
 
     #[test]
     fn resolve_follows_ident_chain_to_primitive() {
