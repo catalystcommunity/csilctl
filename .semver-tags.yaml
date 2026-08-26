@@ -1,4 +1,4 @@
-skip_short_versions: true
+skip_short_versions: false
 targets:
   - name: csilctl
     paths: [cli/Cargo.toml, cli/Cargo.lock, cli/src]
