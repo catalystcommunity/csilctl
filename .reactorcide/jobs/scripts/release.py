@@ -143,6 +143,9 @@ def _build_one_target(
     build_root = root / "target" / "release-container-builds"
     build_root.mkdir(parents=True, exist_ok=True)
     dockerfile = build_root / f"{platform}.Dockerfile"
+    # cargo zigbuild places output under target/<triple>/release, dropping any
+    # glibc-version suffix (e.g. ".2.28") on the --target value.
+    output_triple = target.split(".", 1)[0]
     dockerfile.write_text(
         f"FROM {ZIGBUILD_IMAGE} AS build\n"
         "WORKDIR /io\n"
@@ -150,7 +153,7 @@ def _build_one_target(
         f"RUN cargo zigbuild --release --manifest-path cli/Cargo.toml "
         f"--target {target}\n"
         "FROM scratch AS export\n"
-        f"COPY --from=build /io/cli/target/{target}/release/{binary_name} "
+        f"COPY --from=build /io/cli/target/{output_triple}/release/{binary_name} "
         f"/{binary_name}\n",
         encoding="utf-8",
     )
