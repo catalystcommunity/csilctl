@@ -1,5 +1,5 @@
 id: csilctl-pr-conventional-commits
-name: csilctl PR
+name: csilctl Conventional Commits
 description: "Validate commits on pull requests."
 on:
   events:
