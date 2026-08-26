@@ -225,7 +225,7 @@ def _semver_tags_binary(root: Path) -> Path:
 
 def _semver_tags(root: Path, *, dry_run: bool) -> dict:
     binary = _semver_tags_binary(root)
-    args = [str(binary), "run", "--output_json", "--directories", "cli"]
+    args = [str(binary), "run", "--output_json"]
     if dry_run:
         args.append("--dry_run")
     result = _run(args, cwd=root, capture=True)
