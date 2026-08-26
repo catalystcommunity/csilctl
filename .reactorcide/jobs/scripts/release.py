@@ -321,7 +321,7 @@ def main() -> None:
     preview = _semver_tags(root, dry_run=True)
     published = preview.get("New_release_published")
     if published != "true":
-        lsresult = _run(('ls'), cwd=root)
+        lsresult = _run(("ls",), cwd=root, capture=True)
         print(f'published is {published}, and ls is {lsresult.stdout}')
         print("No new csilctl release is required.", flush=True)
         return
