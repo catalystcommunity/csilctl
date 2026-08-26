@@ -2,6 +2,10 @@
 
 A `curl`/`grpcurl`-style CLI for sending arbitrary [CSIL](https://github.com/catalystcommunity/csilgen) messages.
 
+## Installing
+
+You can head over to the [releases](https://github.com/catalystcommunity/csilctl/releases) page, download the `.tar.gz` file for your system, unpack, and get the executable from inside (with a copy of this readme). 
+
 ## How it works
 
 `csilctl` parses a `.csil` source file directly (see the [CSIL spec](https://github.com/catalystcommunity/csilgen/blob/main/docs/csil-spec.md)) to discover services, their messages, and each message's request/response/error fields. `list` simply shows you a filtered version of whats in this file. `send` works directly from the CSIL file to send and show responses for RPC messages via the `csilgen_transport` crate.
