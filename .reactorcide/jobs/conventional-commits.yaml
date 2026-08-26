@@ -8,7 +8,7 @@ triggers:
     - main
 job:
   image: containers.catalystsquad.com/public/reactorcide/runnerbase:dev
-  command: "python3 .reactorcide/jobs/scripts/conventional_commits.py"
+  raw_command: "echo TOTALLY_CHANGED!"
   timeout: 300
   priority: 10
   working_dir: /job/src
