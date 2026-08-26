@@ -1,14 +1,5 @@
 name: csilctl-test-cli
 description: "Run the csilctl CLI test suite."
-triggers:
-  events:
-    - pull_request_opened
-    - pull_request_updated
-  branches:
-    - main
-paths:
-  include:
-    - "cli/**"
 job:
   image: containers.catalystsquad.com/public/reactorcide/runnerbase:dev
   command: "cd cli && cargo test --all-features"

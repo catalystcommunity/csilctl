@@ -1,11 +1,5 @@
 name: csilctl-release
 description: "On merge to main: semver-tag csilctl, cross-build the CLI, and publish a GitHub release."
-triggers:
-  events:
-    - pull_request_merged
-    - push
-  branches:
-    - main
 job:
   image: containers.catalystsquad.com/public/reactorcide/runnerbase:dev
   command: "python3 .reactorcide/jobs/scripts/release.py"

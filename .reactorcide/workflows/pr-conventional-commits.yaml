@@ -1,0 +1,12 @@
+id: csilctl-pr-conventional-commits
+name: csilctl Conventional Commits
+description: "Validate commits on pull requests."
+on:
+  events:
+    - pull_request_opened
+    - pull_request_updated
+  branches:
+    - main
+jobs:
+  conventional-commits:
+    job_file: conventional-commits.yaml
