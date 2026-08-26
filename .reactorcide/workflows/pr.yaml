@@ -1,3 +1,4 @@
+id: csilctl-pr
 name: csilctl PR
 description: "Validate commits and run the CLI test suite."
 on:
