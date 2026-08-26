@@ -232,7 +232,6 @@ def _semver_tags(root: Path, *, dry_run: bool) -> dict:
     start = result.stdout.find("{")
     if start < 0:
         raise RuntimeError("semver-tags did not return JSON output")
-    print(f'semver tags got {result.stdout}')
     return json.loads(result.stdout[start:])
 
 
@@ -322,8 +321,6 @@ def main() -> None:
     preview = _semver_tags(root, dry_run=True)
     published = preview.get("New_release_published")
     if published != "true":
-        lsresult = _run(("ls",), cwd=root, capture=True)
-        print(f'published is {published}, and ls is {lsresult.stdout}')
         print("No new csilctl release is required.", flush=True)
         return
 

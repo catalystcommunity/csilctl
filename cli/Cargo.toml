@@ -14,9 +14,8 @@ path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
-csilgen-core = { path = "../../csilgen/crates/csilgen-core" }
-csilgen = { path = "../../csilgen/crates/csilgen-cli" }
-csilgen-transport = { path = "../../csilgen/transports/rust" }
+csilgen-core = { git = "https://github.com/catalystcommunity/csilgen.git", tag = "csilgen-core/v0.2.1" }
+csilgen-transport = { git = "https://github.com/catalystcommunity/csilgen.git", tag = "transport-rust/v0.2.0" }
 anyhow = "1.0"
 console = "0.15"
 serde_json = "1.0"
