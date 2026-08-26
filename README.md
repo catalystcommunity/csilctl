@@ -4,7 +4,7 @@ A `curl`/`grpcurl`-style CLI for sending arbitrary [CSIL](https://github.com/cat
 
 ## Installing
 
-You can head over to the [releases](https://github.com/catalystcommunity/csilctl/releases) page, download the `.tar.gz` file for your system, unpack, and get the executable from inside (with a copy of this readme). 
+You can head over to the [releases](https://github.com/catalystcommunity/csilctl/releases) page, download the `.tar.gz` file for your system, unpack, and get the executable from inside. 
 
 ## How it works
 
