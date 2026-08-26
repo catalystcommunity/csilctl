@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use csilctl::{color, list, send};
 
-/// Comment for release trigger 3
+/// Comment for release trigger 4
 /// a curl-like CLI for sending arbitrary CSIL messages
 #[derive(Parser)]
 #[command(name = "csilctl")]

@@ -232,6 +232,7 @@ def _semver_tags(root: Path, *, dry_run: bool) -> dict:
     start = result.stdout.find("{")
     if start < 0:
         raise RuntimeError("semver-tags did not return JSON output")
+    print(f'semver tags got {result.stdout}')
     return json.loads(result.stdout[start:])
 
 
