@@ -1,0 +1,15 @@
+[package]
+name = "csilctl-browser-decoder"
+version = "0.1.0"
+edition = "2024"
+description = "WebAssembly bridge from the CSIL schema diagnostic decoder to browser Developer Tools"
+license = "Apache-2.0"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+console_error_panic_hook = "0.1"
+csilgen-schema = { git = "https://github.com/catalystcommunity/csilgen.git", tag = "csilgen/v0.2.6" }
+js-sys = "=0.3.102"
+wasm-bindgen = "=0.2.125"

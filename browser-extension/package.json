@@ -1,0 +1,9 @@
+{
+  "name": "csilctl-browser-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/capture.test.mjs",
+    "test:wasm": "node tests/wasm.test.mjs"
+  }
+}

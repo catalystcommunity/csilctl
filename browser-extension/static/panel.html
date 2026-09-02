@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CSIL Developer Tools</title>
+    <link rel="stylesheet" href="panel.css">
+    <script type="module" src="panel.js"></script>
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="brand">
+        <img src="icon.svg" alt="">
+        <span>CSIL</span>
+        <span id="capture-count" class="count">0</span>
+      </div>
+      <div class="toolbar-actions">
+        <span id="schema-status" class="schema-status">No schema</span>
+        <button id="load-schema" type="button">Load schema</button>
+        <input id="schema-file" type="file" accept=".cbor,application/cbor,application/octet-stream" hidden>
+        <button id="pause" type="button">Pause</button>
+        <button id="clear" type="button">Clear</button>
+      </div>
+    </header>
+    <div id="runtime-error" class="runtime-error" hidden></div>
+    <main class="workspace">
+      <section class="capture-pane" aria-label="Captured CSIL traffic">
+        <div class="capture-head">
+          <span>Message</span>
+          <span>HTTP</span>
+        </div>
+        <div id="capture-list" class="capture-list"></div>
+        <div id="empty-state" class="empty-state">
+          <strong>No CSIL traffic captured</strong>
+          <span>Keep this panel open, then send an RPC request.</span>
+          <span class="firefox-note">Firefox users must open the Network panel once per Developer Tools session.</span>
+        </div>
+      </section>
+      <section id="details" class="details-pane" aria-label="CSIL message details">
+        <div class="details-placeholder">Select a captured message.</div>
+      </section>
+    </main>
+  </body>
+</html>
