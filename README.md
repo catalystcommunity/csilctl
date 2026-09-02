@@ -60,6 +60,10 @@ CI/CD runs on [Reactorcide](https://github.com/catalystcommunity/reactorcide/), 
 ## Project structure
 
 - `cli/` the main CLI code. I imagine everything is in there for now.
+- `browser-extension/` the Manifest V3 CSIL Developer Tools extension.
+
+See [`browser-extension/README.md`](browser-extension/README.md) for local build
+and installation instructions.
 
 ## Status
 

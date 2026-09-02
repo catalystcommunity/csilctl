@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "CSIL Developer Tools",
+  "description": "Inspect CSIL-RPC and CSIL-Events traffic in browser Developer Tools.",
+  "version": "0.1.0",
+  "devtools_page": "devtools.html",
+  "optional_host_permissions": [
+    "<all_urls>"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self';"
+  },
+  "icons": {
+    "16": "icon-16.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "csil-devtools@catalystcommunity.org",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}
