@@ -148,6 +148,8 @@ def _build_one_target(
     output_triple = target.split(".", 1)[0]
     dockerfile.write_text(
         f"FROM {ZIGBUILD_IMAGE} AS build\n"
+        "ARG CSILCTL_VERSION\n"
+        "ENV CSILCTL_VERSION=${CSILCTL_VERSION}\n"
         "WORKDIR /io\n"
         "COPY . /io\n"
         f"RUN cargo zigbuild --release --manifest-path cli/Cargo.toml "
@@ -175,6 +177,8 @@ def _build_one_target(
             f"filename={dockerfile.name}",
             "--opt",
             "target=export",
+            "--opt",
+            f"build-arg:CSILCTL_VERSION={version}",
             "--output",
             f"type=local,dest={export_dir}",
         ),
@@ -191,6 +195,24 @@ def _build_one_target(
     return archive
 
 
+def _check_release_version(root: Path, version: str) -> None:
+    binary = (
+        root
+        / "target"
+        / "release-container-builds"
+        / "linux-x86_64"
+        / "csilctl"
+    )
+    result = _run((binary, "--version"), cwd=root, capture=True)
+    expected = f"csilctl {version}\n"
+    if result.stdout != expected or result.stderr:
+        raise RuntimeError(
+            "The release binary version does not match the release tag: "
+            f"expected {expected!r}, got stdout={result.stdout!r}, "
+            f"stderr={result.stderr!r}"
+        )
+
+
 def _build_release_artifacts(root: Path, version: str) -> Path:
     output = root / "target" / "release-artifacts"
     if output.exists():
@@ -198,6 +220,7 @@ def _build_release_artifacts(root: Path, version: str) -> Path:
     output.mkdir(parents=True)
     for platform, target, binary_name in BUILD_TARGETS:
         _build_one_target(root, output, version, platform, target, binary_name)
+    _check_release_version(root, version)
     return output
 
 

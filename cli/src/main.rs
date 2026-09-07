@@ -4,7 +4,7 @@ use csilctl::{color, list, send};
 
 /// a curl-like CLI for sending arbitrary CSIL messages
 #[derive(Parser)]
-#[command(name = "csilctl")]
+#[command(name = "csilctl", version = env!("CSILCTL_VERSION"))]
 struct Cli {
     /// path to a .csil source file
     #[arg(long, global = true)]
