@@ -226,6 +226,23 @@ fn print_fields(t: &TypeExpression, f: &File, indent: &str) -> String {
             }
             out
         }
+        // A union: show the arm names joined by "/" (what the type actually
+        // declares), then each arm's own name and contents beneath it -- but
+        // only for arms that have contents of their own to show. A literal
+        // arm (e.g. `Direction = "north" / "south"`) already says everything
+        // in the joined line, so re-printing it as its own name+contents
+        // block would just repeat it.
+        TypeExpression::Choice(arms) => {
+            let mut out = format!("{indent}{}\n", green(&render_type(&resolved)));
+            for arm in arms {
+                if matches!(arm, TypeExpression::Literal(_)) {
+                    continue;
+                }
+                out.push_str(&format!("{indent}{}\n", green(&render_type(arm))));
+                out.push_str(&print_fields(arm, f, &format!("{indent}  ")));
+            }
+            out
+        }
         _ => format!("{indent}{}\n", green(&render_type(&resolved))),
     }
 }
@@ -236,23 +253,16 @@ fn print_type(name: &str, f: &File) -> String {
     out
 }
 
-/// Separates an operation's output into its success type and any error arms;
-/// `Output -> Success / Error1 / Error2` parses as a single choice type where
-/// the first arm is the success case.
-fn split_output(out: &TypeExpression) -> (&TypeExpression, &[TypeExpression]) {
-    if let TypeExpression::Choice(arms) = out {
-        if !arms.is_empty() {
-            return (&arms[0], &arms[1..]);
-        }
-    }
-    (out, &[])
-}
-
 fn is_push_only(op: &ServiceOperation) -> bool {
     matches!(&op.input_type, TypeExpression::Builtin(b) if b == "null")
         && matches!(op.direction, ServiceDirection::Unidirectional | ServiceDirection::Reverse)
 }
 
+/// Prints an operation's request/response as their declared type name plus
+/// its contents -- not split into success/error, since a union's arms
+/// aren't reliably distinguishable that way (e.g. a `ListErrors` type could
+/// be the successful response of an operation that lists errors, not itself
+/// an error case).
 fn print_operation(op: &ServiceOperation, f: &File) -> String {
     let mut name = op.name.clone();
     let dir = match op.direction {
@@ -268,21 +278,37 @@ fn print_operation(op: &ServiceOperation, f: &File) -> String {
 
     if !is_push_only(op) {
         out.push_str(&format!("    {}\n", bold("request")));
-        out.push_str(&print_fields(&op.input_type, f, "      "));
+        out.push_str(&print_named_type(&op.input_type, f, "      "));
     }
 
-    let (success, errs) = split_output(&op.output_type);
     out.push_str(&format!("    {}\n", bold("response")));
-    out.push_str(&print_fields(success, f, "      "));
-    for e in errs {
-        out.push_str(&format!("    {}\n", bold("error")));
-        out.push_str(&print_fields(e, f, "      "));
-    }
+    out.push_str(&print_named_type(&op.output_type, f, "      "));
     out
 }
 
-fn is_request_or_response(name: &str) -> bool {
-    name.ends_with("Request") || name.ends_with("Response")
+/// Prints `t`'s own declared name (if it has one distinct from its
+/// contents, i.e. it's a reference to a definition) followed by its
+/// contents indented beneath it.
+///
+/// A named reference to a union only shows the union's declared arms (e.g.
+/// `FooRequest / BarRequest`) -- not each arm's own fields, since that
+/// would just re-describe what the alias already names. An anonymous union
+/// written directly as the request/response type (no alias of its own) has
+/// no separate name to show, so it gets the full breakdown instead: the
+/// arms joined, then each arm's own name and contents.
+fn print_named_type(t: &TypeExpression, f: &File, indent: &str) -> String {
+    if matches!(t, TypeExpression::Reference(_)) {
+        let mut out = format!("{indent}{}\n", green(&render_type(t)));
+        let resolved = resolve(t, f);
+        if let TypeExpression::Choice(_) = &resolved {
+            out.push_str(&format!("{indent}  {}\n", green(&render_type(&resolved))));
+        } else {
+            out.push_str(&print_fields(t, f, &format!("{indent}  ")));
+        }
+        out
+    } else {
+        print_fields(t, f, indent)
+    }
 }
 
 fn basic_listing(f: &File) -> String {
@@ -300,9 +326,6 @@ fn basic_listing(f: &File) -> String {
 
     out.push_str(&format!("{}\n", bold("Types:")));
     for name in &f.order {
-        if is_request_or_response(name) {
-            continue;
-        }
         out.push_str(&format!("  {}\n", green(name)));
     }
     out
@@ -322,9 +345,6 @@ fn verbose_listing(f: &File) -> String {
     }
     out.push_str(&format!("{}\n", bold("Types:")));
     for name in &f.order {
-        if is_request_or_response(name) {
-            continue;
-        }
         out.push_str(&print_type(name, f));
         out.push('\n');
     }
@@ -502,20 +522,6 @@ mod tests {
     }
 
     #[test]
-    fn split_output_separates_success_and_errors() {
-        let success = TypeExpression::Builtin("text".to_string());
-        let err1 = TypeExpression::Builtin("int".to_string());
-        let choice = TypeExpression::Choice(vec![success.clone(), err1.clone()]);
-        let (s, errs) = split_output(&choice);
-        assert!(matches!(s, TypeExpression::Builtin(b) if b == "text"));
-        assert_eq!(errs.len(), 1);
-
-        let (s, errs) = split_output(&success);
-        assert!(matches!(s, TypeExpression::Builtin(b) if b == "text"));
-        assert!(errs.is_empty());
-    }
-
-    #[test]
     fn run_list_basic_and_verbose_and_errors() {
         let mut f = NamedTempFile::with_suffix(".csil").unwrap();
         f.write_all(
@@ -528,7 +534,9 @@ mod tests {
         assert!(basic.contains("Services:"));
         assert!(basic.contains("Widgets"));
         assert!(basic.contains("Create"));
-        assert!(!basic.contains("CreateRequest"));
+        // Types: lists every named type, including ones an operation
+        // directly declares as its request/response -- nothing is hidden.
+        assert!(basic.contains("CreateRequest"));
 
         let verbose = strip_ansi(&run_list(path, None, true).unwrap());
         assert!(verbose.contains("{* text => int}"));
