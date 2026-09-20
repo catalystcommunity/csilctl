@@ -33,12 +33,15 @@ RELEASE_TAG = re.compile(
     r"(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?)$"
 )
 
-# (platform label, Rust target triple, binary name)
+# Asset platform names are full Rust target triples. Installers such as Webi
+# read the libc requirement from the asset name. A name without `-gnu` makes a
+# glibc-linked binary look safe for musl hosts such as Alpine.
+# (asset platform, Rust build target, binary name)
 BUILD_TARGETS = (
-    ("linux-x86_64", "x86_64-unknown-linux-gnu.2.28", "csilctl"),
-    ("linux-aarch64", "aarch64-unknown-linux-gnu.2.28", "csilctl"),
-    ("darwin-aarch64", "aarch64-apple-darwin", "csilctl"),
-    ("windows-x86_64", "x86_64-pc-windows-gnu", "csilctl.exe"),
+    ("x86_64-unknown-linux-gnu", "x86_64-unknown-linux-gnu.2.28", "csilctl"),
+    ("aarch64-unknown-linux-gnu", "aarch64-unknown-linux-gnu.2.28", "csilctl"),
+    ("aarch64-apple-darwin", "aarch64-apple-darwin", "csilctl"),
+    ("x86_64-pc-windows-gnu", "x86_64-pc-windows-gnu", "csilctl.exe"),
 )
 ZIGBUILD_IMAGE = "ghcr.io/rust-cross/cargo-zigbuild:latest"
 
@@ -200,7 +203,7 @@ def _check_release_version(root: Path, version: str) -> None:
         root
         / "target"
         / "release-container-builds"
-        / "linux-x86_64"
+        / "x86_64-unknown-linux-gnu"
         / "csilctl"
     )
     result = _run((binary, "--version"), cwd=root, capture=True)
