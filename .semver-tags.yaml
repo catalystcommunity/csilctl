@@ -1,4 +1,8 @@
 skip_short_versions: false
 targets:
   - name: csilctl
-    paths: [cli/Cargo.toml, cli/Cargo.lock, cli/src]
+    paths:
+      - cli/Cargo.toml
+      - cli/Cargo.lock
+      - cli/src
+      - .reactorcide/jobs/scripts/release.py
