@@ -4,8 +4,10 @@
 //! `.csil` file (`crate::list::File`).
 
 use std::cmp::Ordering;
+use std::sync::LazyLock;
 
 use anyhow::{Context, Result, anyhow, bail};
+use chrono::{DateTime, Datelike, SecondsFormat, Utc};
 use ciborium::value::Value as CborValue;
 use csilgen_core::{ControlOperator, GroupKey, LiteralValue, SizeConstraint, TypeExpression};
 use regex::Regex;
@@ -17,10 +19,25 @@ use crate::list::{File, entry_name, resolve};
 /// value, using canonical (sorted) map key order so the bytes match what a
 /// real CSIL-RPC server expects.
 pub fn json_to_cbor(json: &JsonValue, type_expr: &TypeExpression, f: &File) -> Result<CborValue> {
-    let resolved = resolve(type_expr, f);
+    let resolved = resolve(type_expr, f)?;
     match &resolved {
         TypeExpression::Builtin(name) => encode_builtin(json, name),
-        TypeExpression::Literal(lit) => Ok(literal_to_cbor(lit)),
+        TypeExpression::NamedNumbers(members) | TypeExpression::NamedNumberGroup(_, members) => {
+            let (_, number) = members
+                .iter()
+                .find(|(label, number)| {
+                    json.as_str() == Some(label.as_str()) || json.as_i64() == Some(*number)
+                })
+                .ok_or_else(|| anyhow!("expected a declared enum label or number, got {json}"))?;
+            Ok(CborValue::Integer((*number).into()))
+        }
+        TypeExpression::Literal(lit) => {
+            let expected = literal_to_cbor(lit);
+            if json != &cbor_to_json(&expected) {
+                bail!("expected literal {lit:?}, got {json}");
+            }
+            Ok(expected)
+        }
         TypeExpression::Group(g) | TypeExpression::Tuple(g) => {
             let obj = json
                 .as_object()
@@ -88,18 +105,29 @@ pub fn json_to_cbor(json: &JsonValue, type_expr: &TypeExpression, f: &File) -> R
             Ok(canon_map(entries))
         }
         TypeExpression::Choice(arms) => {
-            // Try `{"_type": "ArmName", ...}` first; otherwise use the first
-            // arm that encodes without error.
-            if let Some(hint) = json.get("_type").and_then(|v| v.as_str()) {
-                for arm in arms {
-                    if arm_name(arm) == Some(hint) {
-                        return json_to_cbor(json, arm, f);
-                    }
+            // Literal-only enums carry the bare value. Unions carry [arm index, value].
+            let is_enum = arms.iter().all(is_literal_arm);
+            let hint = json.get("_type").and_then(JsonValue::as_str);
+            let hinted =
+                hint.and_then(|name| arms.iter().position(|arm| arm_name(arm) == Some(name)));
+            let candidates = arms.iter().enumerate();
+            let ordered = candidates
+                .clone()
+                .filter(|(_, arm)| is_literal_arm(arm))
+                .chain(candidates.filter(|(_, arm)| !is_literal_arm(arm)));
+            for (index, arm) in ordered {
+                if hinted.is_some_and(|i| i != index) {
+                    continue;
                 }
-            }
-            for arm in arms {
-                if let Ok(v) = json_to_cbor(json, arm, f) {
-                    return Ok(v);
+                if let Ok(value) = json_to_cbor(json, arm, f) {
+                    return if is_enum {
+                        Ok(value)
+                    } else {
+                        Ok(CborValue::Array(vec![
+                            CborValue::Integer((index as u64).into()),
+                            value,
+                        ]))
+                    };
                 }
             }
             bail!("value did not match any arm of the choice type")
@@ -113,6 +141,14 @@ pub fn json_to_cbor(json: &JsonValue, type_expr: &TypeExpression, f: &File) -> R
         }
         TypeExpression::Reference(name) => bail!("unknown type {name:?}"),
         other => bail!("unsupported type expression for encoding: {other:?}"),
+    }
+}
+
+fn is_literal_arm(arm: &TypeExpression) -> bool {
+    match arm {
+        TypeExpression::Literal(_) => true,
+        TypeExpression::Constrained { base_type, .. } => is_literal_arm(base_type),
+        _ => false,
     }
 }
 
@@ -156,10 +192,78 @@ fn encode_builtin(json: &JsonValue, name: &str) -> Result<CborValue> {
             Ok(CborValue::Bool(b))
         }
         "bytes" => encode_bytes(json),
-        "nil" => Ok(CborValue::Null),
+        "date" => {
+            let day = json
+                .as_str()
+                .filter(|s| csilgen_core::is_calendar_date(s) && !s.starts_with("0000"))
+                .ok_or_else(|| {
+                    anyhow!("expected a YYYY-MM-DD date in years 0001-9999, got {json}")
+                })?;
+            Ok(CborValue::Tag(1004, Box::new(CborValue::Text(day.into()))))
+        }
+        "timestamp" => {
+            let instant = parse_instant(json.as_str().context("expected an RFC 3339 timestamp")?)?;
+            let text = instant.to_rfc3339_opts(SecondsFormat::AutoSi, true);
+            Ok(CborValue::Tag(0, Box::new(CborValue::Text(text))))
+        }
+        "cddl_time" => {
+            let instant = epoch_instant(json)?;
+            let seconds = instant.timestamp();
+            let nanos = instant.timestamp_subsec_nanos();
+            let epoch = if nanos == 0 {
+                CborValue::Integer(seconds.into())
+            } else {
+                CborValue::Float(seconds as f64 + f64::from(nanos) / 1e9)
+            };
+            Ok(CborValue::Tag(1, Box::new(epoch)))
+        }
+        "nil" | "null" | "undefined" if json.is_null() => Ok(CborValue::Null),
+        "true" | "false" if json.as_bool() == Some(name == "true") => {
+            Ok(CborValue::Bool(name == "true"))
+        }
+        "nil" | "null" | "undefined" | "true" | "false" => bail!("expected {name}, got {json}"),
         "any" => Ok(json_to_cbor_any(json)),
         other => bail!("unknown builtin type {other:?}"),
     }
+}
+
+fn parse_instant(text: &str) -> Result<DateTime<Utc>> {
+    static WIRE_FORMAT: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}[Tt][0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]{1,9})?([Zz]|[+-][0-9]{2}:[0-9]{2})$").unwrap()
+    });
+    if !WIRE_FORMAT.is_match(text) {
+        bail!("invalid CSIL timestamp {text:?}");
+    }
+    let time = DateTime::parse_from_rfc3339(text)
+        .with_context(|| format!("invalid RFC 3339 timestamp {text:?}"))?;
+    let utc = time.to_utc();
+    if time.timestamp_subsec_nanos() >= 1_000_000_000
+        || !(1..=9999).contains(&time.year())
+        || !(1..=9999).contains(&utc.year())
+    {
+        bail!("invalid CSIL timestamp {text:?}");
+    }
+    Ok(utc)
+}
+
+fn epoch_instant(json: &JsonValue) -> Result<DateTime<Utc>> {
+    if let Some(text) = json.as_str() {
+        return parse_instant(text);
+    }
+    let epoch = json
+        .as_f64()
+        .context("expected epoch seconds or an RFC 3339 timestamp")?;
+    let whole = epoch.floor();
+    if !(-62135596801.0..=253402300800.0).contains(&whole) {
+        bail!("epoch seconds outside years 0001-9999");
+    }
+    let nanos = ((epoch - whole) * 1e9 + 0.5).floor() as u32;
+    DateTime::from_timestamp(
+        whole as i64 + i64::from(nanos / 1_000_000_000),
+        nanos % 1_000_000_000,
+    )
+    .filter(|t| (1..=9999).contains(&t.year()))
+    .context("epoch seconds outside years 0001-9999")
 }
 
 fn encode_bytes(json: &JsonValue) -> Result<CborValue> {
@@ -237,24 +341,24 @@ fn validate_constraint(
             }
         }
         ControlOperator::GreaterEqual(lit) => {
-            check_ordering(value, lit, ".ge", |o| o != Ordering::Less)?
+            check_ordering(value, json, lit, ".ge", |o| o != Ordering::Less)?
         }
         ControlOperator::LessEqual(lit) => {
-            check_ordering(value, lit, ".le", |o| o != Ordering::Greater)?
+            check_ordering(value, json, lit, ".le", |o| o != Ordering::Greater)?
         }
         ControlOperator::GreaterThan(lit) => {
-            check_ordering(value, lit, ".gt", |o| o == Ordering::Greater)?
+            check_ordering(value, json, lit, ".gt", |o| o == Ordering::Greater)?
         }
         ControlOperator::LessThan(lit) => {
-            check_ordering(value, lit, ".lt", |o| o == Ordering::Less)?
+            check_ordering(value, json, lit, ".lt", |o| o == Ordering::Less)?
         }
         ControlOperator::Equal(lit) => {
-            if *value != literal_to_cbor(lit) {
+            if !equals_bound(value, json, lit)? {
                 bail!(".eq constraint violated: {value:?} does not equal {lit:?}");
             }
         }
         ControlOperator::NotEqual(lit) => {
-            if *value == literal_to_cbor(lit) {
+            if equals_bound(value, json, lit)? {
                 bail!(".ne constraint violated: {value:?} equals {lit:?}");
             }
         }
@@ -318,14 +422,39 @@ fn parse_bits_mask(expr: &str) -> Result<i128> {
     .map_err(|e| anyhow!("invalid .bits mask {expr:?}: {e}"))
 }
 
+fn temporal_ordering(
+    value: &CborValue,
+    json: &JsonValue,
+    lit: &LiteralValue,
+) -> Result<Option<Ordering>> {
+    let LiteralValue::Text(bound) = lit else {
+        return Ok(None);
+    };
+    let ordering = match value {
+        CborValue::Tag(0 | 1, _) => epoch_instant(json)?.cmp(&parse_instant(bound)?),
+        CborValue::Tag(1004, _) => json.as_str().context("expected date text")?.cmp(bound),
+        _ => return Ok(None),
+    };
+    Ok(Some(ordering))
+}
+
+fn equals_bound(value: &CborValue, json: &JsonValue, lit: &LiteralValue) -> Result<bool> {
+    Ok(match temporal_ordering(value, json, lit)? {
+        Some(ordering) => ordering.is_eq(),
+        None => *value == literal_to_cbor(lit),
+    })
+}
+
 fn check_ordering(
     value: &CborValue,
+    json: &JsonValue,
     lit: &LiteralValue,
     op_name: &str,
     accept: impl Fn(Ordering) -> bool,
 ) -> Result<()> {
     let target = literal_to_cbor(lit);
-    let ordering = cbor_partial_cmp(value, &target)
+    let ordering = temporal_ordering(value, json, lit)?
+        .or_else(|| cbor_partial_cmp(value, &target))
         .ok_or_else(|| anyhow!("{op_name} does not apply to a {}", cbor_kind(value)))?;
     if !accept(ordering) {
         bail!("{op_name} constraint violated: {value:?} vs {lit:?}");
@@ -410,6 +539,36 @@ fn json_to_cbor_any(json: &JsonValue) -> CborValue {
     }
 }
 
+/// CSIL writes binary64 floats. Ciborium alone shortens exactly representable floats.
+pub(crate) fn write_payload(value: &CborValue, out: &mut Vec<u8>) -> Result<()> {
+    use ciborium_ll::{Encoder, Header};
+    match value {
+        CborValue::Float(number) => {
+            out.push(0xfb);
+            out.extend_from_slice(&number.to_be_bytes());
+        }
+        CborValue::Array(items) => {
+            Encoder::from(&mut *out).push(Header::Array(Some(items.len())))?;
+            for item in items {
+                write_payload(item, out)?;
+            }
+        }
+        CborValue::Map(entries) => {
+            Encoder::from(&mut *out).push(Header::Map(Some(entries.len())))?;
+            for (key, item) in entries {
+                write_payload(key, out)?;
+                write_payload(item, out)?;
+            }
+        }
+        CborValue::Tag(tag, inner) => {
+            Encoder::from(&mut *out).push(Header::Tag(*tag))?;
+            write_payload(inner, out)?;
+        }
+        _ => ciborium::ser::into_writer(value, out)?,
+    }
+    Ok(())
+}
+
 /// Sorts map entries into RFC 8949 canonical order (by encoded key bytes) so
 /// the wire bytes match what a real CSIL server/codec produces.
 fn canon_map(entries: Vec<(CborValue, CborValue)>) -> CborValue {
@@ -417,7 +576,7 @@ fn canon_map(entries: Vec<(CborValue, CborValue)>) -> CborValue {
         .into_iter()
         .map(|(k, v)| {
             let mut buf = Vec::new();
-            ciborium::ser::into_writer(&k, &mut buf).expect("cbor key encodes");
+            write_payload(&k, &mut buf).expect("cbor key encodes");
             (buf, k, v)
         })
         .collect();
@@ -478,6 +637,70 @@ mod tests {
     fn encode(src: &str, json: JsonValue) -> Result<CborValue> {
         let f = load(src);
         json_to_cbor(&json, &TypeExpression::Reference("TestCase".to_string()), &f)
+    }
+
+    #[test]
+    fn named_numbers_require_a_declared_member() {
+        for src in [
+            "TestCase = &(a: -4, b: 20)",
+            "nums = (a: -4, b: 20)\nTestCase = &nums",
+        ] {
+            for input in [serde_json::json!("a"), serde_json::json!(-4)] {
+                assert_eq!(encode(src, input).unwrap(), CborValue::Integer((-4).into()));
+            }
+            assert!(encode(src, serde_json::json!("unknown")).is_err());
+            assert!(encode(src, serde_json::json!(0)).is_err());
+        }
+    }
+
+    #[test]
+    fn literal_enum_and_union_use_the_declared_wire_form() {
+        let input = serde_json::json!("busy");
+        assert_eq!(
+            encode(r#"TestCase = "ready" / "busy""#, input.clone()).unwrap(),
+            CborValue::Text("busy".into())
+        );
+        assert!(encode(r#"TestCase = "ready" / "idle""#, input.clone()).is_err());
+        assert_eq!(
+            encode(r#"TestCase = text / "busy""#, input).unwrap(),
+            CborValue::Array(vec![
+                CborValue::Integer(1.into()),
+                CborValue::Text("busy".into())
+            ])
+        );
+    }
+
+    #[test]
+    fn temporal_values_check_dates_precision_and_bounds() {
+        let date = r#"TestCase = date .ge "2024-02-29""#;
+        assert!(encode(date, serde_json::json!("2024-02-29")).is_ok());
+        assert!(encode(date, serde_json::json!("2023-02-29")).is_err());
+        assert!(encode(date, serde_json::json!("2024-02-28")).is_err());
+        for invalid in [
+            "0000-01-01T00:00:00Z",
+            "9999-12-31T23:30:00-01:00",
+            "2000-01-01T23:59:60Z",
+            "2000-01-01 00:00:00Z",
+            "2000-01-01T00:00:00.0000000001Z",
+        ] {
+            assert!(
+                encode("TestCase = timestamp", invalid.into()).is_err(),
+                "{invalid}"
+            );
+        }
+        assert_eq!(
+            encode("TestCase = timestamp", "2000-01-01T03:00:00.1+03:00".into()).unwrap(),
+            CborValue::Tag(
+                0,
+                Box::new(CborValue::Text("2000-01-01T00:00:00.100Z".into()))
+            )
+        );
+        let epoch = r#"TestCase = cddl_time .ge "1970-01-01T01:00:00+01:00""#;
+        assert_eq!(
+            encode(epoch, 0.into()).unwrap(),
+            CborValue::Tag(1, Box::new(CborValue::Integer(0.into())))
+        );
+        assert!(encode(epoch, (-1).into()).is_err());
     }
 
     #[test]

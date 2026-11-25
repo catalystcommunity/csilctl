@@ -1,0 +1,12 @@
+codes = (ready: 7, busy: -3)
+State = &codes
+common = (state: State, day: date)
+Reading = {
+    common,
+    at: timestamp,
+    seen: cddl_time,
+    mode: &(off: 0, on: 42),
+}
+service Sensors {
+    Report: Reading -> Reading
+}

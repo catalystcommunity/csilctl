@@ -128,7 +128,7 @@ dependencies = [
 [[package]]
 name = "csilgen-common"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.2.6#0e89d6128cdd840d379e1834cb924f5d90ab8579"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "anyhow",
  "serde",
@@ -139,7 +139,7 @@ dependencies = [
 [[package]]
 name = "csilgen-core"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.2.6#0e89d6128cdd840d379e1834cb924f5d90ab8579"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "anyhow",
  "chrono",
@@ -152,7 +152,7 @@ dependencies = [
 [[package]]
 name = "csilgen-schema"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.2.6#0e89d6128cdd840d379e1834cb924f5d90ab8579"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "ciborium",
  "csilgen-core",

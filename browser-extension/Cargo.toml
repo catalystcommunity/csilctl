@@ -10,6 +10,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 console_error_panic_hook = "0.1"
-csilgen-schema = { git = "https://github.com/catalystcommunity/csilgen.git", tag = "csilgen/v0.2.6" }
+csilgen-schema = { git = "https://github.com/catalystcommunity/csilgen.git", tag = "csilgen/v0.3.3" }
 js-sys = "=0.3.102"
 wasm-bindgen = "=0.2.125"

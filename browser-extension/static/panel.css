@@ -113,7 +113,7 @@ button { color: inherit; font: inherit; }
 .scalar-value { overflow-wrap: anywhere; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .scalar-kind { color: var(--muted); font-size: 9px; text-transform: uppercase; }
 .scalar.text .scalar-value { color: var(--success); }
-.scalar.bytes .scalar-value, .scalar.decimal .scalar-value, .scalar.timestamp .scalar-value { color: var(--accent); }
+.scalar.bytes .scalar-value, .scalar.decimal .scalar-value, .scalar.timestamp .scalar-value, .scalar.date .scalar-value { color: var(--accent); }
 .embedded-label { margin-top: 6px; color: var(--muted); font-size: 10px; text-transform: uppercase; }
 
 .diagnostics { display: grid; gap: 6px; }

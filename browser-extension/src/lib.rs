@@ -300,6 +300,10 @@ fn spanned_value_to_js(value: &SpannedValue) -> Result<JsValue, JsValue> {
             set(&result, "kind", JsValue::from_str("text"))?;
             set(&result, "value", JsValue::from_str(text))?;
         }
+        DiagnosticValue::Date(date) => {
+            set(&result, "kind", JsValue::from_str("date"))?;
+            set(&result, "value", JsValue::from_str(date))?;
+        }
         DiagnosticValue::Bytes(bytes) => {
             set(&result, "kind", JsValue::from_str("bytes"))?;
             set(&result, "value", Uint8Array::from(bytes.as_slice()).into())?;

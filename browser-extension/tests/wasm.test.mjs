@@ -17,6 +17,10 @@ assert.equal(decoded.generic.kind, "map");
 assert.equal(decoded.generic.entries.length, 2);
 assert.equal(decoded.generic.entries[1].value.kind, "timestamp");
 
+const date = decode_cbor(Uint8Array.of(0xd9, 0x03, 0xec, 0x6a, ...new TextEncoder().encode("2024-02-29")));
+assert.equal(date.generic.kind, "date");
+assert.equal(date.generic.value, "2024-02-29");
+
 const hostileLength = decode_cbor(new Uint8Array([0x9b, 0, 0, 1, 0, 0, 0, 0, 0]));
 assert.equal(hostileLength.generic, null);
 assert.match(hostileLength.diagnostics[0].message, /does not fit in memory/);

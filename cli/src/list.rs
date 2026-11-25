@@ -48,6 +48,50 @@ impl File {
         })
     }
 
+    fn rule(&self, name: &str) -> Option<&RuleType> {
+        self.by_name
+            .get(name)
+            .map(|&i| &self.spec.rules[i].rule_type)
+    }
+
+    fn expand_record(
+        &self,
+        group: &GroupExpression,
+        path: &mut Vec<String>,
+    ) -> Result<GroupExpression> {
+        let mut entries = Vec::new();
+        for entry in &group.entries {
+            let name = match (&entry.key, &entry.occurrence, &entry.value_type) {
+                (
+                    None,
+                    None,
+                    TypeExpression::Reference(name)
+                    | TypeExpression::Socket(name)
+                    | TypeExpression::Plug(name),
+                ) => name,
+                _ => {
+                    entries.push(entry.clone());
+                    continue;
+                }
+            };
+            match self.rule(name) {
+                Some(
+                    RuleType::GroupDef(inner) | RuleType::TypeDef(TypeExpression::Group(inner)),
+                ) => {
+                    if path.contains(name) || path.len() >= 64 {
+                        bail!("cannot expand nested group reference {name:?}");
+                    }
+                    path.push(name.clone());
+                    entries.extend(self.expand_record(inner, path)?.entries);
+                    path.pop();
+                }
+                None if matches!(entry.value_type, TypeExpression::Plug(_)) => {}
+                _ => entries.push(entry.clone()),
+            }
+        }
+        Ok(GroupExpression { entries })
+    }
+
     fn services(&self) -> impl Iterator<Item = (&str, &[ServiceOperation])> {
         self.spec.rules.iter().filter_map(|r| match &r.rule_type {
             RuleType::ServiceDef(sd) => Some((r.name.as_str(), sd.operations.as_slice())),
@@ -67,24 +111,33 @@ impl File {
 
 /// Follows a chain of `Reference`s through the file's definitions, stopping at
 /// a builtin, a structural type, an unresolvable name, or a cycle.
-pub(crate) fn resolve(t: &TypeExpression, f: &File) -> TypeExpression {
+pub(crate) fn resolve(t: &TypeExpression, f: &File) -> Result<TypeExpression> {
     let mut seen = HashSet::new();
     let mut current = t.clone();
     loop {
         let name = match &current {
             TypeExpression::Reference(n) => n.clone(),
-            _ => return current,
+            TypeExpression::Socket(n) | TypeExpression::Plug(n) => {
+                if f.rule(n).is_none() {
+                    return Ok(TypeExpression::Builtin("any".into()));
+                }
+                n.clone()
+            }
+            TypeExpression::Group(g) => {
+                return Ok(TypeExpression::Group(f.expand_record(g, &mut Vec::new())?));
+            }
+            _ => return Ok(current),
         };
         if !seen.insert(name.clone()) {
-            return current;
+            return Ok(current);
         }
-        let Some(&idx) = f.by_name.get(&name) else {
-            return current;
+        let Some(rule) = f.rule(&name) else {
+            return Ok(current);
         };
-        current = match &f.spec.rules[idx].rule_type {
+        current = match rule {
             RuleType::TypeDef(te) => te.clone(),
             RuleType::GroupDef(ge) => TypeExpression::Group(ge.clone()),
-            _ => return current,
+            _ => return Ok(current),
         };
     }
 }
@@ -165,6 +218,11 @@ fn render_type(t: &TypeExpression) -> String {
         TypeExpression::Builtin(s) => s.clone(),
         TypeExpression::Reference(s) => s.clone(),
         TypeExpression::Literal(lit) => render_literal(lit),
+        TypeExpression::NamedNumbers(members) => {
+            let members: Vec<_> = members.iter().map(|(k, v)| format!("{k}: {v}")).collect();
+            format!("&({})", members.join(", "))
+        }
+        TypeExpression::NamedNumberGroup(name, _) => format!("&{name}"),
         TypeExpression::Group(g) | TypeExpression::Tuple(g) => render_group(g),
         TypeExpression::Array {
             element_type,
@@ -198,7 +256,7 @@ fn render_type(t: &TypeExpression) -> String {
             )
         }
         TypeExpression::Socket(s) => format!("${s}"),
-        TypeExpression::Plug(s) => format!("~{s}"),
+        TypeExpression::Plug(s) => format!("$${s}"),
         TypeExpression::Constrained {
             base_type,
             constraints,
@@ -212,9 +270,9 @@ fn render_type(t: &TypeExpression) -> String {
 
 /// Resolves t (following named references through f) and renders its fields
 /// if it's a group, or a single scalar line otherwise.
-fn print_fields(t: &TypeExpression, f: &File, indent: &str) -> String {
-    let resolved = resolve(t, f);
-    match &resolved {
+fn print_fields(t: &TypeExpression, f: &File, indent: &str) -> Result<String> {
+    let resolved = resolve(t, f)?;
+    Ok(match &resolved {
         TypeExpression::Group(g) | TypeExpression::Tuple(g) => {
             let mut out = String::new();
             for entry in &g.entries {
@@ -239,18 +297,22 @@ fn print_fields(t: &TypeExpression, f: &File, indent: &str) -> String {
                     continue;
                 }
                 out.push_str(&format!("{indent}{}\n", green(&render_type(arm))));
-                out.push_str(&print_fields(arm, f, &format!("{indent}  ")));
+                out.push_str(&print_fields(arm, f, &format!("{indent}  "))?);
             }
             out
         }
         _ => format!("{indent}{}\n", green(&render_type(&resolved))),
-    }
+    })
 }
 
-fn print_type(name: &str, f: &File) -> String {
+fn print_type(name: &str, f: &File) -> Result<String> {
     let mut out = format!("{}\n", bold(name));
-    out.push_str(&print_fields(&TypeExpression::Reference(name.to_string()), f, "  "));
-    out
+    out.push_str(&print_fields(
+        &TypeExpression::Reference(name.to_string()),
+        f,
+        "  ",
+    )?);
+    Ok(out)
 }
 
 fn is_push_only(op: &ServiceOperation) -> bool {
@@ -263,7 +325,7 @@ fn is_push_only(op: &ServiceOperation) -> bool {
 /// aren't reliably distinguishable that way (e.g. a `ListErrors` type could
 /// be the successful response of an operation that lists errors, not itself
 /// an error case).
-fn print_operation(op: &ServiceOperation, f: &File) -> String {
+fn print_operation(op: &ServiceOperation, f: &File) -> Result<String> {
     let mut name = op.name.clone();
     let dir = match op.direction {
         ServiceDirection::Unidirectional => "->",
@@ -278,12 +340,12 @@ fn print_operation(op: &ServiceOperation, f: &File) -> String {
 
     if !is_push_only(op) {
         out.push_str(&format!("    {}\n", bold("request")));
-        out.push_str(&print_named_type(&op.input_type, f, "      "));
+        out.push_str(&print_named_type(&op.input_type, f, "      ")?);
     }
 
     out.push_str(&format!("    {}\n", bold("response")));
-    out.push_str(&print_named_type(&op.output_type, f, "      "));
-    out
+    out.push_str(&print_named_type(&op.output_type, f, "      ")?);
+    Ok(out)
 }
 
 /// Prints `t`'s own declared name (if it has one distinct from its
@@ -296,16 +358,16 @@ fn print_operation(op: &ServiceOperation, f: &File) -> String {
 /// written directly as the request/response type (no alias of its own) has
 /// no separate name to show, so it gets the full breakdown instead: the
 /// arms joined, then each arm's own name and contents.
-fn print_named_type(t: &TypeExpression, f: &File, indent: &str) -> String {
+fn print_named_type(t: &TypeExpression, f: &File, indent: &str) -> Result<String> {
     if matches!(t, TypeExpression::Reference(_)) {
         let mut out = format!("{indent}{}\n", green(&render_type(t)));
-        let resolved = resolve(t, f);
+        let resolved = resolve(t, f)?;
         if let TypeExpression::Choice(_) = &resolved {
             out.push_str(&format!("{indent}  {}\n", green(&render_type(&resolved))));
         } else {
-            out.push_str(&print_fields(t, f, &format!("{indent}  ")));
+            out.push_str(&print_fields(t, f, &format!("{indent}  "))?);
         }
-        out
+        Ok(out)
     } else {
         print_fields(t, f, indent)
     }
@@ -331,13 +393,13 @@ fn basic_listing(f: &File) -> String {
     out
 }
 
-fn verbose_listing(f: &File) -> String {
+fn verbose_listing(f: &File) -> Result<String> {
     let mut out = String::new();
     if f.services().next().is_some() {
         for (svc_name, ops) in f.services() {
             out.push_str(&format!("{}\n", bold(svc_name)));
             for op in ops {
-                out.push_str(&print_operation(op, f));
+                out.push_str(&print_operation(op, f)?);
                 out.push('\n');
             }
         }
@@ -345,10 +407,10 @@ fn verbose_listing(f: &File) -> String {
     }
     out.push_str(&format!("{}\n", bold("Types:")));
     for name in &f.order {
-        out.push_str(&print_type(name, f));
+        out.push_str(&print_type(name, f)?);
         out.push('\n');
     }
-    out
+    Ok(out)
 }
 
 /// Parses the `.csil` source at csil_path and returns its listing.
@@ -367,17 +429,17 @@ pub fn run_list(csil_path: &str, item: Option<&str>, verbose: bool) -> Result<St
     if let Some(item) = item {
         if let Some((svc_name, op)) = f.find_operation(item) {
             let mut out = format!("{}\n", bold(svc_name));
-            out.push_str(&print_operation(op, &f));
+            out.push_str(&print_operation(op, &f)?);
             return Ok(out);
         }
         if f.by_name.contains_key(item) {
-            return Ok(print_type(item, &f));
+            return print_type(item, &f);
         }
         bail!("list: no method or type named \"{item}\" found in {csil_path}");
     }
 
     if verbose {
-        return Ok(verbose_listing(&f));
+        return verbose_listing(&f);
     }
 
     Ok(basic_listing(&f))
@@ -417,28 +479,28 @@ mod tests {
     #[test]
     fn resolve_follows_ident_chain_to_primitive() {
         let f = load("A = B\nB = C\nC = text");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert!(matches!(resolved, TypeExpression::Builtin(b) if b == "text"));
     }
 
     #[test]
     fn resolve_stops_at_structural_type() {
         let f = load("A = B\nB = { id: text }");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert!(matches!(resolved, TypeExpression::Group(_)));
     }
 
     #[test]
     fn resolve_stops_at_unknown_ident() {
         let f = load("A = text");
-        let resolved = resolve(&TypeExpression::Reference("Unknown".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("Unknown".to_string()), &f).unwrap();
         assert!(matches!(resolved, TypeExpression::Reference(n) if n == "Unknown"));
     }
 
     #[test]
     fn resolve_breaks_cycles() {
         let f = load("A = B\nB = A");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert!(matches!(resolved, TypeExpression::Reference(_)));
     }
 
@@ -452,7 +514,7 @@ mod tests {
     #[test]
     fn render_type_builtin() {
         let f = load("A = text");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "text");
     }
 
@@ -471,43 +533,53 @@ mod tests {
     #[test]
     fn render_type_group() {
         let f = load("A = { id: text, ? label: text }");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "{id, label}");
     }
 
     #[test]
     fn render_type_map() {
         let f = load("A = {* text => int}");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "{* text => int}");
     }
 
     #[test]
     fn render_type_array_with_occurrence() {
         let f = load("A = [* text]");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "[* text]");
     }
 
     #[test]
     fn render_type_array_without_occurrence() {
         let f = load("A = [text]");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "[text]");
     }
 
     #[test]
     fn render_type_choice() {
         let f = load("A = text / int");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "text / int");
     }
 
     #[test]
     fn render_type_includes_constraints() {
         let f = load("A = int .ge 0 .le 120");
-        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f);
+        let resolved = resolve(&TypeExpression::Reference("A".to_string()), &f).unwrap();
         assert_eq!(render_type(&resolved), "int .ge(0) .le(120)");
+    }
+
+    #[test]
+    fn list_expands_record_groups_and_displays_named_numbers() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/readings.csil");
+        let reading = strip_ansi(&run_list(path, Some("Reading"), false).unwrap());
+        assert!(reading.contains("state") && reading.contains("day"));
+        assert!(reading.contains("&(off: 0, on: 42)"));
+        let state = strip_ansi(&run_list(path, Some("State"), false).unwrap());
+        assert!(state.contains("&codes"));
     }
 
     #[test]

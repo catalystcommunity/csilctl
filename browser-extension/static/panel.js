@@ -765,6 +765,7 @@ function typedValueTree(value, label = null) {
 function compactValue(value) {
   if (!value) return "null";
   switch (value.kind) {
+    case "date": return value.value;
     case "text": return JSON.stringify(value.value);
     case "integer": return value.value.toString();
     case "float": return `${String(value.value)} (f${value.width})`;

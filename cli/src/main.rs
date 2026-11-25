@@ -22,7 +22,7 @@ struct Cli {
 enum Commands {
     /// list the messages defined by a .csil source file
     List(ListArgs),
-    /// send a message to a host via a generated client
+    /// send a CSIL-RPC message to a host
     Send(SendArgs),
 }
 

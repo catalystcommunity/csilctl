@@ -46,7 +46,7 @@ repository root:
 ```
 
 The command creates `browser-extension/dist/`. This directory contains the
-unpacked extension. The build pins `csilgen-schema` to the `csilgen/v0.2.6`
+unpacked extension. The build pins `csilgen-schema` to the `csilgen/v0.3.3`
 Git tag.
 
 Run the JavaScript tests separately:
