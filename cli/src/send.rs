@@ -7,18 +7,18 @@ use std::net::TcpStream;
 
 use anyhow::{Context, Result};
 use csilgen_transport::carrier::StreamCarrier;
-use csilgen_transport::conventions::{decode_value, encode_value};
+use csilgen_transport::conventions::decode_value;
 use csilgen_transport::rpc::RpcClient;
 
 use csilgen_core::TypeExpression;
 
 use crate::color::{cyan, green};
 use crate::list::File;
-use crate::payload::{cbor_to_json, json_to_cbor};
+use crate::payload::{cbor_to_json, json_to_cbor, write_payload};
 use crate::prompt::prompt_for_request;
 
-/// Parses `--data` (or `{}` if absent) as JSON, sends it as message's request
-/// payload to host, and returns the decoded response rendered as JSON.
+/// Builds the request from JSON and prompted fields, sends it to the host,
+/// and returns the decoded response as JSON.
 pub fn run_send(csil_path: &str, message: &str, data: Option<&str>, host: &str) -> Result<String> {
     let f = File::load(csil_path)?;
     let (svc_name, op) = f
@@ -40,7 +40,7 @@ pub fn run_send(csil_path: &str, message: &str, data: Option<&str>, host: &str) 
             }
         }
         None if matches!(&op.input_type, TypeExpression::Builtin(b) if b == "null") => {
-            serde_json::json!({})
+            serde_json::Value::Null
         }
         None => {
             println!("Sending {} to {}", cyan(message), green(host));
@@ -51,7 +51,8 @@ pub fn run_send(csil_path: &str, message: &str, data: Option<&str>, host: &str) 
 
     let request_cbor = json_to_cbor(&data_json, &op.input_type, &f)
         .with_context(|| format!("send: building request for {message}"))?;
-    let payload = encode_value(&request_cbor).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let mut payload = Vec::new();
+    write_payload(&request_cbor, &mut payload)?;
 
     let stream = TcpStream::connect(host).with_context(|| format!("send: connecting to {host}"))?;
     let carrier = StreamCarrier::new(stream);

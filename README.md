@@ -30,11 +30,16 @@ You can head over to the [releases](https://github.com/catalystcommunity/csilctl
    csilctl --client ./corndogs.csil send --message CreateWidget --data '{"name": "widget-1", "count": 3}'
    ```
 
-3. **Send it** — the payload is marshaled into the client's generated message type and sent to a `host:port`:
+3. **Send the request.** The CLI uses the CSIL file to encode the payload as CBOR. Use `--host` to select the RPC server.
 
    ```sh
    csilctl --client ./corndogs.csil send --message CreateWidget --data '{"name": "widget-1"}' --host example.com:9000
    ```
+
+The CLI and the browser extension use the `csilgen/v0.3.3` release. For a named
+number, supply the member label or its assigned integer in `--data`. For a
+`date`, use `YYYY-MM-DD`. For a `timestamp`, use RFC 3339 text with a time
+zone. For `cddl_time`, use epoch seconds or RFC 3339 text.
 
 ## Usage
 

@@ -191,7 +191,9 @@ name = "csilctl"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "chrono",
  "ciborium",
+ "ciborium-ll",
  "clap",
  "console",
  "csilgen-core",
@@ -204,7 +206,7 @@ dependencies = [
 [[package]]
 name = "csilgen-common"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen-core%2Fv0.2.1#6585c856fd17b8009432fcb7278a8fb72c9b02a7"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "anyhow",
  "serde",
@@ -215,7 +217,7 @@ dependencies = [
 [[package]]
 name = "csilgen-core"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen-core%2Fv0.2.1#6585c856fd17b8009432fcb7278a8fb72c9b02a7"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "anyhow",
  "chrono",
@@ -228,7 +230,7 @@ dependencies = [
 [[package]]
 name = "csilgen-transport"
 version = "0.1.0"
-source = "git+https://github.com/catalystcommunity/csilgen.git?tag=transport-rust%2Fv0.2.0#4c4acd4166fca7faf32bb4d753c4616b82106bde"
+source = "git+https://github.com/catalystcommunity/csilgen.git?tag=csilgen%2Fv0.3.3#73ba5ac55f74608c73da6320693efc8e2b7239ca"
 dependencies = [
  "ciborium",
  "ciborium-io",

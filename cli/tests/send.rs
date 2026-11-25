@@ -96,3 +96,38 @@ fn send_reports_unknown_message() {
         .unwrap_err();
     assert!(err.to_string().contains("no method named"));
 }
+
+#[test]
+fn send_matches_the_csilgen_reading_codec() {
+    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/readings.csil");
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().unwrap();
+        let mut server = RpcServer::new(StreamCarrier::new(stream));
+        server
+            .serve_one(&mut |req| {
+                // EncodeReading from the csilgen 0.3.3 Go generator produced these bytes.
+                let expected = [
+                    &b"\xa5\x62at\xc0\x742024-02-29T03:04:05Z"[..],
+                    b"\x63day\xd9\x03\xec\x6a2024-02-29",
+                    b"\x64mode\x18\x2a",
+                    b"\x64seen\xc1\xfb\xbf\xe0\x00\x00\x00\x00\x00\x00",
+                    b"\x65state\x22",
+                ]
+                .concat();
+                assert_eq!(req.payload, expected);
+                HandlerOutcome::Reply {
+                    variant: "Reading".into(),
+                    payload: expected,
+                }
+            })
+            .unwrap();
+    });
+
+    let json = r#"{"state":"busy","mode":42,"day":"2024-02-29","at":"2024-02-29T04:04:05+01:00","seen":-0.5}"#;
+    let out = run_send(path, "Report", Some(json), &addr.to_string()).unwrap();
+    server.join().unwrap();
+    assert!(out.contains("2024-02-29T03:04:05Z"));
+}

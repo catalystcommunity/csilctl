@@ -13,14 +13,14 @@ use crate::list::{File, entry_name, resolve};
 /// Returns the `.default(v)` literal for `type_expr`, if it (once resolved)
 /// carries one, converted to JSON so it can stand in for an absent field
 /// without prompting.
-fn default_value(type_expr: &TypeExpression, f: &File) -> Option<JsonValue> {
-    let TypeExpression::Constrained { constraints, .. } = resolve(type_expr, f) else {
-        return None;
+fn default_value(type_expr: &TypeExpression, f: &File) -> Result<Option<JsonValue>> {
+    let TypeExpression::Constrained { constraints, .. } = resolve(type_expr, f)? else {
+        return Ok(None);
     };
-    constraints.iter().find_map(|c| match c {
+    Ok(constraints.iter().find_map(|c| match c {
         ControlOperator::Default(lit) => Some(literal_to_json(lit)),
         _ => None,
-    })
+    }))
 }
 
 fn literal_to_json(lit: &LiteralValue) -> JsonValue {
@@ -64,7 +64,7 @@ fn prompt_value<R: BufRead, W: Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> Result<JsonValue> {
-    let resolved = resolve(type_expr, f);
+    let resolved = resolve(type_expr, f)?;
     match &resolved {
         TypeExpression::Builtin(name) => match existing {
             Some(v) => Ok(v.clone()),
@@ -81,7 +81,7 @@ fn prompt_value<R: BufRead, W: Write>(
                 let name = entry_name(entry);
                 let child_existing = existing_obj.and_then(|o| o.get(&name));
                 if child_existing.is_none() {
-                    if let Some(default) = default_value(&entry.value_type, f) {
+                    if let Some(default) = default_value(&entry.value_type, f)? {
                         obj.insert(name, default);
                         continue;
                     }
@@ -119,8 +119,10 @@ fn prompt_builtin<R: BufRead, W: Write>(
     reader: &mut R,
     writer: &mut W,
 ) -> Result<JsonValue> {
-    if name == "nil" || name == "null" {
-        return Ok(JsonValue::Null);
+    match name {
+        "nil" | "null" | "undefined" => return Ok(JsonValue::Null),
+        "true" | "false" => return Ok(JsonValue::Bool(name == "true")),
+        _ => {}
     }
 
     let line = read_line(writer, &format!("{path} ({name})"), reader)?;
@@ -142,7 +144,11 @@ fn prompt_builtin<R: BufRead, W: Write>(
             "false" | "f" | "no" | "n" => Ok(JsonValue::Bool(false)),
             _ => bail!("{path}: expected true/false, got {line:?}"),
         },
-        "text" | "bytes" => Ok(JsonValue::String(line)),
+        "date" | "timestamp" | "text" | "bytes" => Ok(JsonValue::String(line)),
+        "cddl_time" => Ok(line
+            .parse::<serde_json::Number>()
+            .map(JsonValue::Number)
+            .unwrap_or(JsonValue::String(line))),
         "any" => Ok(serde_json::from_str(&line).unwrap_or(JsonValue::String(line))),
         other => bail!("{path}: unknown builtin type {other:?}"),
     }
