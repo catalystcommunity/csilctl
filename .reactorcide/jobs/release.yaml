@@ -12,5 +12,4 @@ job:
   run_as:
     user: root
 environment:
-  REACTORCIDE_REPO: catalystcommunity/csilctl
   GITHUB_PAT: "${secret:catalystcommunity/ci:githubpat}"
